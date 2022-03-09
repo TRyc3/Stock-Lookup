@@ -1,7 +1,4 @@
-#TO DO: Implement visualization
 from asyncio.windows_events import INFINITE
-from cgitb import reset
-from re import X
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -9,6 +6,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from itertools import islice
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -54,16 +52,13 @@ while True:
         driver.get(link)
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
+        
+        driver.execute_script("window.scrollTo(0, 500)")
 
         #open period selection drop down menu
-        print ("loading")
         element = WebDriverWait(driver, 3).until(
             EC.presence_of_element_located((By.XPATH, '//div[@class="M(0) O(n):f D(ib) Bd(0) dateRangeBtn O(n):f Pos(r)"]')))
         element.click()
-        
-        driver.find_element(By.CSS_SELECTOR, "body").send_keys(Keys.CONTROL, Keys.PAGE_DOWN)
-        driver.find_element(By.CSS_SELECTOR, "body").send_keys(Keys.CONTROL, Keys.DOWN)
-
 
         #select period based on user input
         if values["Period"][0] == "Six Months":
@@ -87,15 +82,12 @@ while True:
                 EC.element_to_be_clickable((By.XPATH, '//button[@data-value="MAX"]')))
             element.click()
 
-        print ("apply")
         #click apply button to change results based on desired time frame
         element = WebDriverWait(driver, 3).until(
                 EC.element_to_be_clickable((By.XPATH, '//button/span[contains(text(),"Apply")]')))
         element.click()
-        # driver.find_element(By.XPATH, '//button/span[contains(text(),"Apply")]').click()
 
 
-        print ("scroll")
         #scroll to end of results
         table_end = soup.find_all("div", {"class" : "Mstart(30px) Pt(10px)"})
         while len(table_end) > 0:
@@ -107,8 +99,6 @@ while True:
         #locate and collect table information
         table = soup.find("table", {"class" : "W(100%) M(0)"})
         results = table.find_all("tr", {"class" : "BdT Bdc($seperatorColor) Ta(end) Fz(s) Whs(nw)"})
-
-        header = ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'ADJ CLOSE', 'VOLUME']
 
         #parse data and remove unneeded rows
         data = []
@@ -127,22 +117,39 @@ while True:
                 data.append(info)
 
         #create dataframe
-        df = pd.DataFrame(data = data, columns = header)
-        df.astype({'OPEN' : float, 'HIGH' : float, 'LOW' : float, 'ADJ CLOSE' : float, 'VOLUME' : float})
-        df.set_index("DATE", inplace = True)
+        date = []
+        open = []
+        high = []
+        low = []
+        close = []
+        adj_close = []
+        volume = []
+        for i in range(len(data)):
+            date.append(data[i][0])
+            open.append(float(data[i][1]))
+            high.append(float(data[i][2]))
+            low.append(float(data[i][3]))
+            close.append(float(data[i][4]))
+            adj_close.append(float(data[i][5]))
+            volume.append(float(data[i][6]))
 
-        #change columns to lists for easier computation
-        volume = df['VOLUME'].to_list()
-        close = df['CLOSE'].to_list()
-        open = df['OPEN'].to_list()
-        high = df['HIGH'].to_list()
-        low = df['LOW'].to_list()
-        volume.reverse()
-        close.reverse()
+        date.reverse()
         open.reverse()
         high.reverse()
         low.reverse()
+        close.reverse()
+        adj_close.reverse()
+        volume.reverse()
 
+
+        df = pd.DataFrame(data = date, columns = ["DATE"])
+        df.insert(1, 'OPEN', open, True)
+        df.insert(2, 'HIGH', high, True)
+        df.insert(3, 'LOW', low, True)
+        df.insert(4, 'CLOSE', close, True)
+        df.insert(5, 'ADJ', adj_close, True)
+        df.insert(6, 'VOLUME', volume, True)
+        df.set_index("DATE", inplace = True)
 
         #calculate on-balance volume
         obv = [int(volume[0])]
@@ -153,14 +160,12 @@ while True:
                 obv.append(obv[i - 1] - int(volume[i]))
             else:
                 obv.append(obv[i - 1])
-        obv.reverse()
 
         #calculate accumulation-distribution line
         ad = [(((float(close[0]) - float(low[0])) - (float(high[0]) - float(close[0]))) / (float(high[0]) - float(low[0]))) * float(volume[0])]
         for i in  range(1, len(close)):
             cmfv = (((float(close[i]) - float(low[i])) - (float(high[i]) - float(close[i]))) / (float(high[i]) - float(low[i]))) * float(volume[i])
             ad.append(ad[i - 1] + cmfv)
-        ad.reverse()
 
         #calculate Aroon oscilator
         aroon = []
@@ -171,26 +176,25 @@ while True:
             min = 0
             if i >= 25:
                 for j in range(25):
-                    if float(high[i - j]) > max:
-                        max = float(high[i - j])
+                    if high[i - j] > max:
+                        max = high[i - j]
                         period_high = j
-                    if float(low[i - j]) < min:
-                        min = float(low[i - j])
+                    if low[i - j] < min:
+                        min = low[i - j]
                         period_low = j
             else:
                 for j in range(i):
-                    if float(high[i - j]) > max:
-                        max = float(high[i - j])
+                    if high[i - j] > max:
+                        max = high[i - j]
                         period_high = j
                     if float(low[i - j]) < min:
-                        min = float(low[i - j])
+                        min = low[i - j]
                         period_low = j
 
             aroon_up = 4 * (25 - period_high)
             aroon_down = 4 * (25 - period_low)
             aroon_osc = aroon_up - aroon_down
             aroon.append(aroon_osc)
-        aroon.reverse()
 
 
         #calculate relative strength index
@@ -221,35 +225,46 @@ while True:
             else:
                 rs = average_profit / average_loss
             rsi.append(100 - (100 / (1 + rs)))
-        rsi.reverse()
 
 
         #calculate moving average convergence divergence
         macd = []
         signal = []
+        ma_twentysix = []
+        ma_twelve = []
+        ma_nine = []
         for i in range(len(close)):
             ema_nine = 0
             ema_twelve = 0
             ema_twentysix = 0
             if i >= 26:
-                for j in range(26, 0, -1):
-                    ema_twentysix = (float(close[i - j]) * (2/27)) + (ema_twentysix * (2/27))
-                    if j < 12:
-                        ema_twelve = (float(close[i - j]) * (2/13)) + (ema_twelve * (2/13))
-                    if j < 9:
-                        ema_nine = (float(close[i - j]) * (2/10)) + (ema_nine * (2/10))
+                ema_twentysix = (float(close[i]) * (2/27)) + (ma_twentysix[i - 1] * (1 - (2/27)))
+                ema_twelve = (float(close[i]) * (2/13)) + (ma_twelve[i - 1] * (1 - (2/13)))
+                ema_nine = (float(close[i]) * (2/10)) + (ma_nine[i - 1] * (1 - (2/10)))
             else:
-                for j in range(j, 0, -1):
-                    ema_twentysix = (float(close[i - j]) * (2/27)) + (ema_twentysix * (2/27))
+                for j in range(i):
+                    ema_twentysix += float(close[i - j])
                     if j < 12:
-                        ema_twelve = (float(close[i - j]) * (2/13)) + (ema_twelve * (2/13))
+                        ema_twelve += float(close[i - j])
                     if j < 9:
-                        ema_nine = (float(close[i - j]) * (2/10)) + (ema_nine * (2/10))
-            macd.append(ema_twelve - ema_twentysix)
-            signal.append(ema_nine)
-        macd.reverse()
-        signal.reverse
+                        ema_nine += float(close[i - j])
 
+                ema_twentysix = ema_twentysix / (i + 1)
+                if i >= 12:
+                    ema_twelve = ema_twelve / 12
+                else:
+                    ema_twelve = ema_twelve / (i + 1)
+                if i >= 9:
+                    ema_nine = ema_nine / 9
+                else:
+                    ema_nine = ema_nine / (i + 1)
+
+        
+            macd.append(ema_twelve - ema_twentysix)
+            signal.append(ema_nine - ema_twentysix)
+            ma_twentysix.append(ema_twentysix)
+            ma_twelve.append(ema_twelve)
+            ma_nine.append(ema_nine)
 
         #add analysis to dataframe
         df.insert(6, 'OBV', obv, True)
@@ -259,38 +274,64 @@ while True:
         df.insert(10, 'MACD', macd, True)
         df.insert(11, 'SIGNAL', signal, True)
 
-        print (df)
+        print (df.dtypes)
+        print(df)
 
-        # date_tick = [df["DATE"][0]]
-        # date_tick_location = [0]
-        # for i in range(1,len(df["DATE"])):
-        #     if df["DATE"][i][2] != df["DATE"][i - 1][2] and df["DATE"][i][1] != df["DATE"][i - 1][1]:
-        #         date_tick.append(df["DATE"][i])
-        #         date_tick_location.append(i)
+        #Second menu
+        layout = [
+            [sg.Text(symbol.upper())],
 
-        #visualization
-        # plt.plot(df["DATE"], df["OBV"])   
-        # plt.xlabel('Date')
-        # plt.ylabel('On-Balance Volume')
-        # plt.axes().set_xticklabels(date_tick, reset = True)
-        # plt.show()
+            #Buttons for graphs
+            [sg.Button("OBV"),
+            sg.Button("A/D"),
+            sg.Button("AROON"),
+            sg.Button("RSI"),
+            sg.Button("MACD"),
+            sg.Button("Done")]
+        ]
+        graph_window = sg.Window("Stock Look up", layout)
 
-        plt.subplots(figsize = (15, 20))
-        plt.xticks(rotation = 45)
-        res = sns.lineplot(data = df["OBV"])
-        res.set_xlabel("Dates", fontsize = 20)
-        for index, label in enumerate(res.get_xticklabels()):
-            if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
-                if index % 100 == 0:
-                    label.set_visible(True)
-                else:
-                    label.set_visible(False)
-            elif values["Period"][0] == "One Year" or values["Period"][0] == "YTD" or values["Period"][0] == "Six Months":
-                if index % 25 == 0:
-                    label.set_visible(True)
-                else:
-                    label.set_visible(False)
-        # res.set_xticklabels(res.get_xmajorticklabels(), fontsize = 6)
-        # res.set_yticklabels(res.get_ymajorticklabels(), fontsize = 6)
-        sns.set(font_scale=1)
-        plt.show()
+        while True:
+            graph_event, graph_value = graph_window.read()
+
+            #visualization
+            fig, axes = plt.subplots(2, 1, figsize = (20, 10))
+            if graph_event == "OBV":
+                res = sns.lineplot(ax = axes[1], data = df["OBV"], legend = 'auto')
+            elif graph_event == "A/D":
+                res = sns.lineplot(ax = axes[1], data = df["A/D"], legend = 'auto')
+            elif graph_event == "AROON":
+                res = sns.lineplot(ax = axes[1], data = df["AROON"], legend = 'auto')
+            elif graph_event == "RSI":
+                res = sns.lineplot(ax = axes[1], data = df["RSI"], legend = 'auto')
+            elif graph_event == "MACD":
+                res = sns.lineplot(ax = axes[1], data = df["MACD"], legend = 'auto')
+                res = sns.lineplot(ax = axes[1], data = df["SIGNAL"], legend = 'auto')
+
+            for index, label in enumerate(res.get_xticklabels()):
+                if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
+                    if index % 100 == 0:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+                elif values["Period"][0] == "One Year" or values["Period"][0] == "YTD" or values["Period"][0] == "Six Months":
+                    if index % 25 == 0:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+            
+
+            res = sns.lineplot(ax = axes[0], data = df["CLOSE"], legend = 'auto')
+            for index, label in enumerate(res.get_xticklabels()):
+                if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
+                    if index % 100 == 0:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+                elif values["Period"][0] == "One Year" or values["Period"][0] == "YTD" or values["Period"][0] == "Six Months":
+                    if index % 25 == 0:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+                    
+            plt.show()
