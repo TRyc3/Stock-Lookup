@@ -55,37 +55,47 @@ while True:
         
         driver.execute_script("window.scrollTo(0, 500)")
 
+
+        error = soup.find_all("span", {"class" : "D(b) Ta(c) W(100%) Fz(m) C($tertiaryColor) Mb(10px) Fw(500) Ell"})
+        if len(error) > 0:
+            print ("ERROR: Symbol not valid")
+            driver.close()
+            sg.Print("An error happened. Symbol Invalid")
+            sg.popup_error('AN EXCEPTION OCCURRED!')
+            break
+
         #open period selection drop down menu
         element = WebDriverWait(driver, 3).until(
             EC.presence_of_element_located((By.XPATH, '//div[@class="M(0) O(n):f D(ib) Bd(0) dateRangeBtn O(n):f Pos(r)"]')))
         element.click()
 
         #select period based on user input
-        if values["Period"][0] == "Six Months":
-            element = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[@data-value="6_M"]')))
-            element.click()
-        elif values["Period"][0] == "YTD":
-            element = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[@data-value="YTD"]')))
-            element.click()
-        elif values["Period"][0] == "One Year":
-            element = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[@data-value="1_Y"]')))
-            element.click()
-        elif values["Period"][0] == "Five Years":
-            element = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[@data-value="5_Y"]')))
-            element.click()
-        elif values["Period"][0] == "MAX":
-            element = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[@data-value="MAX"]')))
-            element.click()
+        if len(values["Period"]) > 0:
+            if values["Period"][0] == "Six Months":
+                element = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button[@data-value="6_M"]')))
+                element.click()
+            elif values["Period"][0] == "YTD":
+                element = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button[@data-value="YTD"]')))
+                element.click()
+            elif values["Period"][0] == "One Year":
+                element = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button[@data-value="1_Y"]')))
+                element.click()
+            elif values["Period"][0] == "Five Years":
+                element = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button[@data-value="5_Y"]')))
+                element.click()
+            elif values["Period"][0] == "MAX":
+                element = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button[@data-value="MAX"]')))
+                element.click()
 
-        #click apply button to change results based on desired time frame
-        element = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, '//button/span[contains(text(),"Apply")]')))
-        element.click()
+            #click apply button to change results based on desired time frame
+            element = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button/span[contains(text(),"Apply")]')))
+            element.click()
 
 
         #scroll to end of results
@@ -309,29 +319,42 @@ while True:
                 res = sns.lineplot(ax = axes[1], data = df["SIGNAL"], legend = 'auto')
 
             for index, label in enumerate(res.get_xticklabels()):
-                if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
-                    if index % 100 == 0:
-                        label.set_visible(True)
+                if len(values["Period"]) > 0:    
+                    if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
+                        if index % 100 == 0:
+                            label.set_visible(True)
+                        else:
+                            label.set_visible(False)
                     else:
-                        label.set_visible(False)
-                elif values["Period"][0] == "One Year" or values["Period"][0] == "YTD" or values["Period"][0] == "Six Months":
+                        if index % 25 == 0:
+                            label.set_visible(True)
+                        else:
+                            label.set_visible(False)
+                else:
                     if index % 25 == 0:
                         label.set_visible(True)
                     else:
                         label.set_visible(False)
-            
+                
 
             res = sns.lineplot(ax = axes[0], data = df["CLOSE"], legend = 'auto')
             for index, label in enumerate(res.get_xticklabels()):
-                if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
-                    if index % 100 == 0:
-                        label.set_visible(True)
+                if len(values["Period"]) > 0:    
+                    if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
+                        if index % 100 == 0:
+                            label.set_visible(True)
+                        else:
+                            label.set_visible(False)
                     else:
-                        label.set_visible(False)
-                elif values["Period"][0] == "One Year" or values["Period"][0] == "YTD" or values["Period"][0] == "Six Months":
+                        if index % 25 == 0:
+                            label.set_visible(True)
+                        else:
+                            label.set_visible(False)
+                else:
                     if index % 25 == 0:
                         label.set_visible(True)
                     else:
                         label.set_visible(False)
+                
                     
             plt.show()
