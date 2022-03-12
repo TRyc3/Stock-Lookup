@@ -1,5 +1,4 @@
 from asyncio.windows_events import INFINITE
-import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -43,9 +42,14 @@ while True:
         break
 
     if event == "Search":
-        driver = webdriver.Chrome()
-
         symbol = values["Symbol"]
+        if len(symbol) > 4 or len(symbol) == 0:
+            print ("ERROR: Symbol not valid")
+            sg.Print("An error happened. Symbol Invalid")
+            sg.popup_error('AN EXCEPTION OCCURRED!')
+            break  
+
+        driver = webdriver.Chrome()                  
 
         link = "https://finance.yahoo.com/quote/" + symbol + "/history" 
 
@@ -55,7 +59,8 @@ while True:
         
         driver.execute_script("window.scrollTo(0, 500)")
 
-
+        table = soup.find("table", {"class" : "W(100%) M(0)"})
+        results = table.find_all("tr", {"class" : "BdT Bdc($seperatorColor) Ta(end) Fz(s) Whs(nw)"})
         error = soup.find_all("span", {"class" : "D(b) Ta(c) W(100%) Fz(m) C($tertiaryColor) Mb(10px) Fw(500) Ell"})
         if len(error) > 0:
             print ("ERROR: Symbol not valid")
@@ -63,6 +68,11 @@ while True:
             sg.Print("An error happened. Symbol Invalid")
             sg.popup_error('AN EXCEPTION OCCURRED!')
             break
+        elif not len(results) > 0:
+            print ("ERROR: Symbol not valid")
+            driver.close()
+            sg.Print("An error happened. Symbol Invalid")
+            sg.popup_error('AN EXCEPTION OCCURRED!')
 
         #open period selection drop down menu
         element = WebDriverWait(driver, 3).until(
@@ -165,25 +175,26 @@ while True:
         obv = [int(volume[0])]
         for i in range (1, len(volume)):
             if close[i] > close[i - 1]:
-                obv.append(obv[i - 1] + int(volume[i]))
+                obv.append(obv[i - 1] + volume[i])
             elif close[i] < close[i - 1]:
-                obv.append(obv[i - 1] - int(volume[i]))
+                obv.append(obv[i - 1] - volume[i])
             else:
                 obv.append(obv[i - 1])
 
         #calculate accumulation-distribution line
-        ad = [(((float(close[0]) - float(low[0])) - (float(high[0]) - float(close[0]))) / (float(high[0]) - float(low[0]))) * float(volume[0])]
+        ad = [(((close[0] - low[0]) - (high[0] - close[0])) / (high[0] - low[0])) * volume[0]]
         for i in  range(1, len(close)):
-            cmfv = (((float(close[i]) - float(low[i])) - (float(high[i]) - float(close[i]))) / (float(high[i]) - float(low[i]))) * float(volume[i])
+            cmfv = (((close[i] - low[i]) - (high[i] - close[i])) / (high[i] - low[i])) * volume[i]
             ad.append(ad[i - 1] + cmfv)
 
         #calculate Aroon oscilator
-        aroon = []
+        aroon_up = []
+        aroon_down = []
         for i in range (len(high)):
             period_high = 0
             max = 0
             period_low = 0
-            min = 0
+            min = INFINITE
             if i >= 25:
                 for j in range(25):
                     if high[i - j] > max:
@@ -197,14 +208,12 @@ while True:
                     if high[i - j] > max:
                         max = high[i - j]
                         period_high = j
-                    if float(low[i - j]) < min:
+                    if low[i - j] < min:
                         min = low[i - j]
                         period_low = j
 
-            aroon_up = 4 * (25 - period_high)
-            aroon_down = 4 * (25 - period_low)
-            aroon_osc = aroon_up - aroon_down
-            aroon.append(aroon_osc)
+            aroon_up.append(4 * (25 - period_high))
+            aroon_down.append(4 * (25 - period_low))
 
 
         #calculate relative strength index
@@ -216,18 +225,18 @@ while True:
             average_loss = 0
             if i >= 14:
                 for j in range(14):
-                    if float(close[i - j]) > float(open[i - j]):
-                        profit += float(close[i - j]) - float(open[i - j])
-                    elif float(close[i - j]) < float(open[i - j]):
-                        loss += float(open[i - j]) - float(close[i - j])
+                    if close[i - j] > open[i - j]:
+                        profit += close[i - j] - open[i - j]
+                    elif close[i - j] < open[i - j]:
+                        loss += open[i - j] - close[i - j]
                 average_profit = profit / 14
                 average_loss = loss / 14
             else:
                 for j in range(i):
-                    if float(close[i - j]) > float(open[i - j]):
-                        profit += float(close[i - j]) - float(open[i - j])
-                    elif float(close[i - j]) < float(open[i - j]):
-                        loss += float(open[i - j]) - float(close[i - j])
+                    if close[i - j] > open[i - j]:
+                        profit += close[i - j] - open[i - j]
+                    elif close[i - j] < open[i - j]:
+                        loss += open[i - j] - close[i - j]
                 average_profit = profit / (i + 1)
                 average_loss = loss / (i + 1)
             if average_loss == 0:
@@ -248,16 +257,16 @@ while True:
             ema_twelve = 0
             ema_twentysix = 0
             if i >= 26:
-                ema_twentysix = (float(close[i]) * (2/27)) + (ma_twentysix[i - 1] * (1 - (2/27)))
-                ema_twelve = (float(close[i]) * (2/13)) + (ma_twelve[i - 1] * (1 - (2/13)))
-                ema_nine = (float(close[i]) * (2/10)) + (ma_nine[i - 1] * (1 - (2/10)))
+                ema_twentysix = (close[i] * (2/27)) + (ma_twentysix[i - 1] * (1 - (2/27)))
+                ema_twelve = (close[i] * (2/13)) + (ma_twelve[i - 1] * (1 - (2/13)))
+                ema_nine = (close[i] * (2/10)) + (ma_nine[i - 1] * (1 - (2/10)))
             else:
                 for j in range(i):
-                    ema_twentysix += float(close[i - j])
+                    ema_twentysix += close[i - j]
                     if j < 12:
-                        ema_twelve += float(close[i - j])
+                        ema_twelve += close[i - j]
                     if j < 9:
-                        ema_nine += float(close[i - j])
+                        ema_nine += close[i - j]
 
                 ema_twentysix = ema_twentysix / (i + 1)
                 if i >= 12:
@@ -276,15 +285,16 @@ while True:
             ma_twelve.append(ema_twelve)
             ma_nine.append(ema_nine)
 
+
         #add analysis to dataframe
         df.insert(6, 'OBV', obv, True)
         df.insert(7, 'A/D', ad, True)
-        df.insert(8, 'AROON', aroon, True)
-        df.insert(9, 'RSI', rsi, True)
-        df.insert(10, 'MACD', macd, True)
-        df.insert(11, 'SIGNAL', signal, True)
+        df.insert(8, 'AROON UP', aroon_up, True)
+        df.insert(9, 'AROON DOWN', aroon_down, True)
+        df.insert(10, 'RSI', rsi, True)
+        df.insert(11, 'MACD', macd, True)
+        df.insert(12, 'SIGNAL', signal, True)
 
-        print (df.dtypes)
         print(df)
 
         #Second menu
@@ -304,6 +314,10 @@ while True:
         while True:
             graph_event, graph_value = graph_window.read()
 
+            if graph_event == "Done":
+                window.close()
+                break
+
             #visualization
             fig, axes = plt.subplots(2, 1, figsize = (20, 10))
             if graph_event == "OBV":
@@ -311,12 +325,14 @@ while True:
             elif graph_event == "A/D":
                 res = sns.lineplot(ax = axes[1], data = df["A/D"], legend = 'auto')
             elif graph_event == "AROON":
-                res = sns.lineplot(ax = axes[1], data = df["AROON"], legend = 'auto')
+                res = sns.lineplot(ax = axes[1], data = df["AROON UP"], legend = 'full', label = "UP")
+                res = sns.lineplot(ax = axes[1], data = df["AROON DOWN"], legend = 'full', label = "DOWN")
             elif graph_event == "RSI":
                 res = sns.lineplot(ax = axes[1], data = df["RSI"], legend = 'auto')
             elif graph_event == "MACD":
-                res = sns.lineplot(ax = axes[1], data = df["MACD"], legend = 'auto')
-                res = sns.lineplot(ax = axes[1], data = df["SIGNAL"], legend = 'auto')
+                res = sns.lineplot(ax = axes[1], data = df["MACD"], legend = 'full', label = "MACD")
+                res = sns.lineplot(ax = axes[1], data = df["SIGNAL"], legend = 'full', label = "SIGNAL")
+
 
             for index, label in enumerate(res.get_xticklabels()):
                 if len(values["Period"]) > 0:    
@@ -337,7 +353,7 @@ while True:
                         label.set_visible(False)
                 
 
-            res = sns.lineplot(ax = axes[0], data = df["CLOSE"], legend = 'auto')
+            res = sns.lineplot(ax = axes[0], data = df["CLOSE"], legend = 'full')
             for index, label in enumerate(res.get_xticklabels()):
                 if len(values["Period"]) > 0:    
                     if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
@@ -356,5 +372,4 @@ while True:
                     else:
                         label.set_visible(False)
                 
-                    
             plt.show()
