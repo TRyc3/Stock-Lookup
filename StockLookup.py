@@ -1,4 +1,6 @@
 from asyncio.windows_events import INFINITE
+from cProfile import label
+from turtle import color
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -274,39 +276,36 @@ while True:
         signal = []
         ma_twentysix = []
         ma_twelve = []
-        ma_nine = []
+        macd_ema = []
         for i in range(len(close)):
-            ema_nine = 0
+            ema_signal = 0
             ema_twelve = 0
             ema_twentysix = 0
             if i >= 26:
                 ema_twentysix = (close[i] * (2/27)) + (ma_twentysix[i - 1] * (1 - (2/27)))
                 ema_twelve = (close[i] * (2/13)) + (ma_twelve[i - 1] * (1 - (2/13)))
-                ema_nine = (close[i] * (2/10)) + (ma_nine[i - 1] * (1 - (2/10)))
             else:
                 for j in range(i):
                     ema_twentysix += close[i - j]
                     if j < 12:
                         ema_twelve += close[i - j]
-                    if j < 9:
-                        ema_nine += close[i - j]
 
                 ema_twentysix = ema_twentysix / (i + 1)
                 if i >= 12:
                     ema_twelve = ema_twelve / 12
                 else:
                     ema_twelve = ema_twelve / (i + 1)
-                if i >= 9:
-                    ema_nine = ema_nine / 9
-                else:
-                    ema_nine = ema_nine / (i + 1)
 
-        
             macd.append(ema_twelve - ema_twentysix)
-            signal.append(ema_nine - ema_twentysix)
             ma_twentysix.append(ema_twentysix)
             ma_twelve.append(ema_twelve)
-            ma_nine.append(ema_nine)
+
+            if i >= 9:
+                ema_signal = (macd[i] * (2/10)) + (signal[i - 1] * (1 - (2/10)))
+            else:
+                ema_signal = ema_twelve - ema_twentysix
+            signal.append(ema_signal)
+            
 
 
         #add analysis to dataframe
@@ -357,8 +356,11 @@ while True:
                 vres = sns.lineplot(ax = axes[0], data = df["AROON UP"], legend = 'full', label = "UP")
                 vres = sns.lineplot(ax = axes[0], data = df["AROON DOWN"], legend = 'full', label = "DOWN")
             elif graph_event == "RSI":
-                vres = sns.lineplot(ax = axes[0], data = df["RSI"], legend = 'auto')
+                axes[0].axhline(y = 30, color = 'green', label = 'oversold', ls = '--') 
+                axes[0].axhline(y = 70, color = 'red', label = 'overbought', ls = '--')
+                vres = sns.lineplot(ax = axes[0], data = df["RSI"], legend = 'auto', label = "RSI")      
             elif graph_event == "MACD":
+                axes[0].axhline(y = 0, color = 'red', ls = '--')
                 vres = sns.lineplot(ax = axes[0], data = df["MACD"], legend = 'full', label = "MACD")
                 vres = sns.lineplot(ax = axes[0], data = df["SIGNAL"], legend = 'full', label = "SIGNAL")
 
