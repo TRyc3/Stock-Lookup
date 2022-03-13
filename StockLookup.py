@@ -5,11 +5,13 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from datetime import datetime
 from itertools import islice
 import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import mplfinance as mpl
 import PySimpleGUI as sg
 
 
@@ -39,11 +41,12 @@ window = sg.Window("Stock Look up", layout)
 while True:
     event,values = window.read()
     if event == sg.WIN_CLOSED or event == "Done":
+        window.close()
         break
 
     if event == "Search":
         symbol = values["Symbol"]
-        if len(symbol) > 4 or len(symbol) == 0:
+        if len(symbol) > 5 or len(symbol) == 0:
             print ("ERROR: Symbol not valid")
             sg.Print("An error happened. Symbol Invalid")
             sg.popup_error('AN EXCEPTION OCCURRED!')
@@ -145,7 +148,8 @@ while True:
         adj_close = []
         volume = []
         for i in range(len(data)):
-            date.append(data[i][0])
+            datetime_object = datetime.strptime(data[i][0], '%b %d %Y')
+            date.append(datetime_object)
             open.append(float(data[i][1]))
             high.append(float(data[i][2]))
             low.append(float(data[i][3]))
@@ -172,7 +176,7 @@ while True:
         df.set_index("DATE", inplace = True)
 
         #calculate on-balance volume
-        obv = [int(volume[0])]
+        obv = [volume[0]]
         for i in range (1, len(volume)):
             if close[i] > close[i - 1]:
                 obv.append(obv[i - 1] + volume[i])
@@ -218,32 +222,51 @@ while True:
 
         #calculate relative strength index
         rsi = []
+        average_gain = []
+        average_loss = []
         for i in range(len(close)):
             profit = 0
             loss = 0
-            average_profit = 0
-            average_loss = 0
+            current_profit = 0
+            current_loss = 0
             if i >= 14:
-                for j in range(14):
+                for j in range(1,13):
                     if close[i - j] > open[i - j]:
-                        profit += close[i - j] - open[i - j]
+                        profit += (close[i - j] - open[i - j]) / open[i - j]
                     elif close[i - j] < open[i - j]:
-                        loss += open[i - j] - close[i - j]
-                average_profit = profit / 14
-                average_loss = loss / 14
+                        loss += (open[i - j] - close[i - j]) / close[i - j]
+                profit = (profit / 14) * 100
+                loss = (loss / 14) * 100
+
+                if close[i] > open[i]:
+                    current_profit = (close[i] - open[i]) / open[i]
+                    profit += current_profit
+                elif close[i] < open[i]:
+                    current_loss = (open[i] - close[i]) / close[i]
+                    loss += current_loss
+
+                profit = (profit / 14) * 100
+                loss = (loss / 14) * 100
             else:
                 for j in range(i):
                     if close[i - j] > open[i - j]:
-                        profit += close[i - j] - open[i - j]
+                        profit += (close[i - j] - open[i - j]) / open[i - j]
                     elif close[i - j] < open[i - j]:
-                        loss += open[i - j] - close[i - j]
-                average_profit = profit / (i + 1)
-                average_loss = loss / (i + 1)
-            if average_loss == 0:
+                        loss += (open[i - j] - close[i - j]) / close[i - j]
+                profit = (profit / (i + 1)) * 100
+                loss = (loss / (i + 1)) * 100
+            if loss == 0:
                 rs = INFINITE
             else:
-                rs = average_profit / average_loss
-            rsi.append(100 - (100 / (1 + rs)))
+                rs = profit / loss
+                
+            if i > 14:
+                rsi.append(100 - (100 / (1 + ((average_gain[i - 1] * 13 ) + current_profit) / ((average_loss[i - 1] * 13) + current_loss))))
+            else:
+                rsi.append(100 - (100 / (1 + rs)))
+            average_gain.append(profit)
+            average_loss.append(loss)
+
 
 
         #calculate moving average convergence divergence
@@ -307,69 +330,54 @@ while True:
             sg.Button("AROON"),
             sg.Button("RSI"),
             sg.Button("MACD"),
-            sg.Button("Done")]
+            sg.Button("Done"),
+            
+            sg.Listbox(values = [
+            "Line",
+            "Candle Stick"],
+            key = "Style",
+            size = (12,2))]
         ]
         graph_window = sg.Window("Stock Look up", layout)
 
         while True:
-            graph_event, graph_value = graph_window.read()
+            graph_event, graph_values = graph_window.read()
 
             if graph_event == "Done":
                 window.close()
                 break
 
             #visualization
-            fig, axes = plt.subplots(2, 1, figsize = (20, 10))
+            fig, axes = plt.subplots(2, 1, figsize = (20, 15))
             if graph_event == "OBV":
-                res = sns.lineplot(ax = axes[1], data = df["OBV"], legend = 'auto')
+                vres = sns.lineplot(ax = axes[0], data = df["OBV"], legend = 'auto')
             elif graph_event == "A/D":
-                res = sns.lineplot(ax = axes[1], data = df["A/D"], legend = 'auto')
+                vres = sns.lineplot(ax = axes[0], data = df["A/D"], legend = 'auto')
             elif graph_event == "AROON":
-                res = sns.lineplot(ax = axes[1], data = df["AROON UP"], legend = 'full', label = "UP")
-                res = sns.lineplot(ax = axes[1], data = df["AROON DOWN"], legend = 'full', label = "DOWN")
+                vres = sns.lineplot(ax = axes[0], data = df["AROON UP"], legend = 'full', label = "UP")
+                vres = sns.lineplot(ax = axes[0], data = df["AROON DOWN"], legend = 'full', label = "DOWN")
             elif graph_event == "RSI":
-                res = sns.lineplot(ax = axes[1], data = df["RSI"], legend = 'auto')
+                vres = sns.lineplot(ax = axes[0], data = df["RSI"], legend = 'auto')
             elif graph_event == "MACD":
-                res = sns.lineplot(ax = axes[1], data = df["MACD"], legend = 'full', label = "MACD")
-                res = sns.lineplot(ax = axes[1], data = df["SIGNAL"], legend = 'full', label = "SIGNAL")
+                vres = sns.lineplot(ax = axes[0], data = df["MACD"], legend = 'full', label = "MACD")
+                vres = sns.lineplot(ax = axes[0], data = df["SIGNAL"], legend = 'full', label = "SIGNAL")
 
-
-            for index, label in enumerate(res.get_xticklabels()):
-                if len(values["Period"]) > 0:    
-                    if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
-                        if index % 100 == 0:
-                            label.set_visible(True)
-                        else:
-                            label.set_visible(False)
-                    else:
-                        if index % 25 == 0:
-                            label.set_visible(True)
-                        else:
-                            label.set_visible(False)
-                else:
-                    if index % 25 == 0:
-                        label.set_visible(True)
-                    else:
-                        label.set_visible(False)
                 
+            if len(graph_values["Style"]) > 0:
+                if graph_values["Style"][0] == "Line":
+                    res1 = sns.lineplot(ax = axes[1], data = df["CLOSE"], legend = 'full')
 
-            res = sns.lineplot(ax = axes[0], data = df["CLOSE"], legend = 'full')
-            for index, label in enumerate(res.get_xticklabels()):
-                if len(values["Period"]) > 0:    
-                    if values["Period"][0] == "Five Years" or values["Period"][0] == "MAX":
-                        if index % 100 == 0:
-                            label.set_visible(True)
-                        else:
-                            label.set_visible(False)
-                    else:
-                        if index % 25 == 0:
-                            label.set_visible(True)
-                        else:
-                            label.set_visible(False)
                 else:
-                    if index % 25 == 0:
-                        label.set_visible(True)
-                    else:
-                        label.set_visible(False)
+                    candle = pd.DataFrame(data = date, columns = ["Date"])
+                    candle.insert(1, 'Open', open, True)
+                    candle.insert(2, 'High', high, True)
+                    candle.insert(3, 'Low', low, True)
+                    candle.insert(4, 'Close', close, True)
+                    candle.set_index("Date", inplace = True)
+                    
+                    mpl.plot(candle, type = 'candle', ax = axes[1], style = 'yahoo')
+
+            else:
+                res1 = sns.lineplot(ax = axes[1], data = df["CLOSE"], legend = 'full')
                 
             plt.show()
